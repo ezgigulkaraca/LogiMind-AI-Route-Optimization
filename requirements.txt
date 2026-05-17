@@ -2,4 +2,4 @@ streamlit
 ortools
 pandas
 plotly
-google-generativeai
+
