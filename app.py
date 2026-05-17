@@ -7,7 +7,7 @@ import random
 import google.generativeai as genai
 
 # API Key (güvenli kullanım)
-genai.configure(api_key=st.secrets["AIzaSyBTvNzZnb6oVqiMDQCfQjcD-pTvcXsoc_o"])
+genai.configure(api_key=st.secrets["API KEY"])
 
 # Sayfa ayarları
 st.set_page_config(page_title="LogiMind - Rota Optimizasyonu", layout="wide")
