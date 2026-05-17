@@ -9,24 +9,24 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="LogiMind - Lojistik Optimizasyon Sistemi", layout="wide")
 
 st.title("LogiMind: Akıllı Rota ve Yük Optimizasyon Platformu")
-st.write("KOBİ'ler ve lojistik sağlayıcıları için operasyonel maliyetleri ve karbon salınımını minimize eden karar destek sistemi.")
+st.write("KOBIEler ve lojistik sağlayıcıları için operasyonel maliyetleri ve karbon salınımını minimize eden karar destek sistemi.")
 
 # Kontrol Paneli (Sidebar)
 st.sidebar.header("Sistem Parametreleri")
-arac_sayisi = st.sidebar.slider("Aktif Araç Sayısı", min_value=1, max_value=5, value=3)
-arac_kapasitesi = st.sidebar.slider("Araç Kapasitesi (KG)", min_value=10, max_value=50, value=25)
+arac_sayisi = st.sidebar.slider("Aktif Arac Sayisi", min_value=1, max_value=5, value=3)
+arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=10, max_value=50, value=25)
 
 # Sipariş Veri Modeli
 data_dict = {
-    "Musteri_Adi": ["Depo (Merkez)", "Müşteri A", "Müşteri B", "Müşteri C", "Müşteri D", "Müşteri E", "Müşteri F", "Müşteri G", "Müşteri H", "Müşteri I", "Müşteri J"],
-    "X_Koordinati": [0, 5, -3, 12, 8, -6, 2, 14, -2, 7, -8],
-    "Y_Koordinati": [0, 10, 8, 2, -4, -5, 15, -1, -9, 7, 4],
-    "Talep_KG": [0, 3, 5, 4, 2, 6, 3, 5, 2, 4, 3]
+    "Musteri_Adi": ["Depo (Merkez)", "Musteri A", "Musteri B", "Musteri C", "Musteri D", "Musteri E", "Musteri F", "Musteri G", "Musteri H", "Musteri I"],
+    "X_Koordinati": [0, 5, -3, 12, 8, -6, 2, 14, -2, 7],
+    "Y_Koordinati": [0, 10, 8, 2, -4, -5, 15, -1, -9, 7],
+    "Talep_KG": [0, 3, 5, 4, 2, 6, 3, 5, 2, 4]
 }
 df = pd.DataFrame(data_dict)
 
 # Veri Tablosu Gösterimi
-st.subheader("Mevcut Sipariş ve Dağıtım Verileri")
+st.subheader("Mevcut Siparis ve Dagitim Verileri")
 st.dataframe(df, use_container_width=True)
 
 # Mesafe Matrisi Hesaplama Fonksiyonu
@@ -39,15 +39,15 @@ def mesafe_matrisi_olustur(x_coords, y_coords):
     return matrix
 
 # Optimizasyon Tetikleyici
-if st.button("Rotaları Optimize Et", type="primary"):
+if st.button("Rotalari Optimize Et", type="primary"):
     
     toplam_talep = df["Talep_KG"].sum()
     toplam_kapasite = arac_sayisi * arac_kapasitesi
     
     if toplam_talep > toplam_kapasite:
-        st.error(f"Hata: Yetersiz Kapasite. Toplam Talep: {toplam_talep} KG, Seçilen Araçların Toplam Kapasitesi: {toplam_kapasite} KG. Lütfen Araç Sayısını veya Kapasitesini artırın.")
+        st.error(f"Hata: Yetersiz Kapasite. Toplam Talep: {toplam_talep} KG, Secilen Aracların Toplam Kapasitesi: {toplam_kapasite} KG. Lutfen Arac Sayisini veya Kapasitesini artirin.")
     else:
-        with st.spinner("Yapay zeka optimizasyon motoru çalıştırılıyor..."):
+        with st.spinner("Yapay zeka optimizasyon motoru calistiriliyor..."):
             try:
                 # OR-Tools Model Kurulumu
                 mesafeler = mesafe_matrisi_olustur(df["X_Koordinati"].tolist(), df["Y_Koordinati"].tolist())
@@ -75,11 +75,11 @@ if st.button("Rotaları Optimize Et", type="primary"):
                 search_parameters = pywrapcp.DefaultRoutingSearchParameters()
                 search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
 
-                # ÇÖZÜM AŞAMASI (Güvenli Alan)
+                # COZUM ASAMASI
                 solution = routing.SolveWithParameters(search_parameters)
 
                 if solution:
-                    st.success("🚀 Rotalar başarıyla optimize edildi!")
+                    st.success("Rotalar basariyla optimize edildi!")
                     
                     # Performans Metrikleri Paneli
                     col1, col2, col3, col4 = st.columns(4)
@@ -88,47 +88,4 @@ if st.button("Rotaları Optimize Et", type="primary"):
                     yeni_mesafe = 0
                     rotalar = {}
                     
-                    for vehicle_id in range(arac_sayisi):
-                        index = routing.Start(vehicle_id)
-                        route = []
-                        while not routing.IsEnd(index):
-                            node = manager.IndexToNode(index)
-                            route.append(node)
-                            previous_index = index
-                            index = solution.Value(routing.NextVar(index))
-                            yeni_mesafe += mesafeler[manager.IndexToNode(previous_index)][manager.IndexToNode(index)]
-                        route.append(manager.IndexToNode(index))
-                        rotalar[vehicle_id] = route
-
-                    yeni_mesafe_km = yeni_mesafe / 10.0
-                    tasarruf_orani = ((eski_mesafe - yeni_mesafe_km) / eski_mesafe) * 100
-                    karbon_tasarruf = (eski_mesafe - yeni_mesafe_km) * 0.25
-
-                    with col1:
-                        st.metric("Geleneksel Yöntem Mesafesi", f"{eski_mesafe:.1f} KM")
-                    with col2:
-                        st.metric("LogiMind Optimize Mesafe", f"{yeni_mesafe_km:.1f} KM", f"-{tasarruf_orani:.1f}%")
-                    with col3:
-                        st.metric("Verimlilik Artışı", f"%{tasarruf_orani:.1f}")
-                    with col4:
-                        st.metric("CO2 Salınım Azaltımı", f"{karbon_tasarruf:.1f} KG")
-
-                    # İnteraktif Rota Analiz Haritası
-                    st.subheader("Optimize Dağıtım Rotaları Analizi")
-                    fig = go.Figure()
-
-                    # Müşteri Konumları
-                    fig.add_trace(go.Scatter(
-                        x=df["X_Koordinati"].iloc[1:], y=df["Y_Koordinati"].iloc[1:],
-                        mode='markers+text',
-                        marker=dict(size=12, color='rgb(44, 62, 80)'),
-                        text=df["Musteri_Adi"].iloc[1:], textposition="top center",
-                        name="Teslimat Noktaları"
-                    ))
-
-                    # Merkez Depo
-                    fig.add_trace(go.Scatter(
-                        x=[df["X_Koordinati"].iloc[0]], y=[df["Y_Koordinati"].iloc[0]],
-                        mode='markers+text',
-                        marker=dict(size=16, color='rgb(192, 57, 43)', symbol='square'),
-                        text=
+                    for vehicle_id
