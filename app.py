@@ -4,21 +4,33 @@ import numpy as np
 import plotly.graph_objects as go
 import itertools
 import random
+import google.generativeai as genai
 
-# Sayfa ayarları
+# -----------------------------
+# API KEY (Streamlit Secrets)
+# -----------------------------
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+# -----------------------------
+# SAYFA AYARLARI
+# -----------------------------
 st.set_page_config(page_title="LogiMind - Rota Optimizasyonu", layout="wide")
 
 st.title("LogiMind: Rota ve Yük Optimizasyon Sistemi")
 st.write("Lojistik operasyonlar için karar destek uygulaması")
 
-# Sidebar parametreler
+# -----------------------------
+# SIDEBAR PARAMETRELER
+# -----------------------------
 st.sidebar.header("Parametreler")
 
 arac_sayisi = st.sidebar.slider("Araç Sayısı", 1, 5, 2)
 arac_kapasitesi = st.sidebar.slider("Araç Kapasitesi", 5, 50, 15)
 trafik = st.sidebar.slider("Trafik Katsayısı", 1.0, 2.0, 1.0)
 
-# Sabit müşteri verisi
+# -----------------------------
+# MÜŞTERİ VERİSİ
+# -----------------------------
 tum_musteriler = {
     "A": (5, 10, 3),
     "B": (-3, 8, 5),
@@ -31,20 +43,53 @@ tum_musteriler = {
     "I": (7, 7, 4)
 }
 
-# Mesafe fonksiyonu
+# -----------------------------
+# MESAFE FONKSİYONU
+# -----------------------------
 def mesafe(p1, p2):
     return np.hypot(p1[0] - p2[0], p1[1] - p2[1]) * trafik
 
-# Rastgele rota mesafesi
+# -----------------------------
+# RANDOM ROTA
+# -----------------------------
 def random_mesafe(df):
     noktalar = df.iloc[1:].to_dict('records')
     random.shuffle(noktalar)
-
     yol = [(0,0)] + [(n["x"], n["y"]) for n in noktalar] + [(0,0)]
-
     return sum(mesafe(yol[i], yol[i+1]) for i in range(len(yol)-1))
 
-# Müşteri seçimi
+# -----------------------------
+# GEMINI YORUM FONKSİYONU
+# -----------------------------
+def gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik):
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        prompt = f"""
+        Sen bir lojistik uzmanısın.
+
+        Aşağıdaki dağıtım planını değerlendir:
+
+        Araç sayısı: {arac_sayisi}
+        Toplam mesafe: {toplam_mesafe:.2f}
+        Tasarruf: %{tasarruf:.1f}
+        Trafik katsayısı: {trafik}
+
+        3 kısa madde yaz:
+        - verimlilik analizi
+        - iyileştirme önerisi
+        - işletmeye etkisi
+        """
+
+        response = model.generate_content(prompt)
+        return response.text
+
+    except Exception as e:
+        return f"AI yorum oluşturulamadı: {e}"
+
+# -----------------------------
+# MÜŞTERİ SEÇİMİ
+# -----------------------------
 st.subheader("Müşteri Seçimi")
 
 secili = st.multiselect(
@@ -57,7 +102,9 @@ if len(secili) == 0:
     st.warning("En az bir müşteri seçilmelidir.")
     st.stop()
 
-# DataFrame oluşturma
+# -----------------------------
+# DATAFRAME
+# -----------------------------
 data = [{"name":"Depo","x":0,"y":0,"demand":0}]
 
 for m in secili:
@@ -68,7 +115,9 @@ df = pd.DataFrame(data)
 
 st.dataframe(df)
 
-# Optimizasyon
+# -----------------------------
+# OPTİMİZASYON
+# -----------------------------
 if st.button("Optimize Et"):
 
     toplam_talep = df["demand"].sum()
@@ -83,7 +132,7 @@ if st.button("Optimize Et"):
     arac_rotalari = {i: [] for i in range(arac_sayisi)}
     arac_yukleri = {i: 0 for i in range(arac_sayisi)}
 
-    # Müşteri atama
+    # müşteri atama
     for m in musteri_listesi:
         uygun = []
 
@@ -106,7 +155,7 @@ if st.button("Optimize Et"):
         arac_rotalari[secilen].append(m)
         arac_yukleri[secilen] += m["demand"]
 
-    # Rota optimizasyonu
+    # rota optimizasyonu
     toplam_mesafe = 0
     fig = go.Figure()
     renkler = ["red","blue","green","purple","orange"]
@@ -141,11 +190,11 @@ if st.button("Optimize Et"):
             line=dict(color=renkler[a])
         ))
 
-    # Karşılaştırma
+    # karşılaştırma
     r_mesafe = random_mesafe(df)
     tasarruf = ((r_mesafe - toplam_mesafe) / r_mesafe) * 100
 
-    # Sonuçlar
+    # sonuçlar
     st.subheader("Sonuçlar")
 
     col1, col2, col3 = st.columns(3)
@@ -154,7 +203,7 @@ if st.button("Optimize Et"):
     col2.metric("Optimize Mesafe", f"{toplam_mesafe:.2f}")
     col3.metric("Tasarruf (%)", f"{tasarruf:.1f}")
 
-    # Grafik
+    # grafik
     fig.add_trace(go.Scatter(
         x=df["x"][1:],
         y=df["y"][1:],
@@ -172,4 +221,10 @@ if st.button("Optimize Et"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.write("Bu sistem lojistik maliyetlerini azaltmaya yönelik bir karar destek uygulamasıdır.")
+    # GEMINI AI YORUM
+    st.subheader("AI Destekli Değerlendirme")
+
+    yorum = gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik)
+    st.write(yorum)
+
+    st.write("Bu sistem lojistik operasyonlar için karar destek amacıyla geliştirilmiştir.")
