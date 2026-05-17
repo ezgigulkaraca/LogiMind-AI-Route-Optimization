@@ -14,7 +14,7 @@ API_KEY = "AIzaSyAXA7edsGE5ggJrQo5wT2CO2pe2BSbEoKc"
 genai.configure(api_key=API_KEY)
 
 # EN STABİL MODEL
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 # =========================
 # APP
