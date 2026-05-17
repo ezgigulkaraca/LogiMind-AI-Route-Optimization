@@ -88,4 +88,4 @@ if st.button("Rotalari Optimize Et", type="primary"):
                     yeni_mesafe = 0
                     rotalar = {}
                     
-                    for vehicle_id in range(arac_sayisi):
+                    for vehicle_id in range(arac_sayisi)
