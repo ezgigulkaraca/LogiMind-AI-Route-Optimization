@@ -13,7 +13,7 @@ st.write("Musteri bazli secim ve dinamik yuk/kapasite kontrol paneli.")
 # Kontrol Paneli (Sidebar)
 st.sidebar.header("Sistem Parametreleri")
 arac_sayisi = st.sidebar.slider("Aktif Arac Sayisi", min_value=0, max_value=5, value=2)
-arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=10, max_value=100, value=30)
+arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=5, max_value=100, value=15)
 
 # Sabit Veri Havuzu
 tüm_musteriler = {
@@ -37,7 +37,7 @@ else:
     secilen_isimler = st.multiselect(
         "Bugun teslimat yapilacak musterileri listeden isaretleyin:",
         options=list(tüm_musteriler.keys()),
-        default=["Musteri A", "Musteri B", "Musteri C", "Musteri H"]
+        default=["Musteri A", "Musteri G", "Musteri D", "Musteri C", "Musteri E"]
     )
 
     # Secilen verilerden dinamik tablo olusturma
@@ -69,105 +69,33 @@ else:
             if toplam_talep > toplam_kapasite:
                 st.error(f"Hata: Yetersiz Kapasite. Secilen musterilerin toplam talebi {toplam_talep} KG, fakat {arac_sayisi} aracinizin toplam tasima kapasitesi {toplam_kapasite} KG. Lutfen parametreleri guncelleyin.")
             else:
-                with st.spinner("En kisa optimum rotalar hesaplaniyor..."):
+                with st.spinner("Dengeli ve en kisa optimum rotalar hesaplaniyor..."):
                     
                     # Matematiksel Mesafe Hesaplama Fonksiyonu
                     def mesafe_bul(p1, p2):
                         return np.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
-                    # Musterileri yuke ve konuma gore araclara paylastirma
+                    # Musteri listesini kopyala
+                    musteri_listesi = tablo_verisi[1:].copy()
+                    
+                    # Bos arac rotalari hazırlığı
                     arac_rotalari = {i: [] for i in range(arac_sayisi)}
                     arac_yukleri = {i: 0 for i in range(arac_sayisi)}
                     
-                    musteri_listesi = tablo_verisi[1:].copy()
-                    
-                    # Basit ve kilitlenmeyen Akilli Yukleme Algoritmasi
+                    # YUKLERI ARACLAR ARASINDA DENGELI PAYLASTIRMA ALGORITMASI
+                    # Musterileri yakınlıklarına ve arac kapasitelerine gore sirayla boler
                     for m_verisi in musteri_listesi:
-                        atamis = False
+                        uygun_araclar = []
                         for a_id in range(arac_sayisi):
                             if arac_yukleri[a_id] + m_verisi["Talep_KG"] <= arac_kapasitesi:
-                                arac_rotalari[a_id].append(m_verisi)
-                                arac_yukleri[a_id] += m_verisi["Talep_KG"]
-                                atamis = True
-                                break
-                        if not atamis:
-                            # Eger ilk bulunan araca sigmazsa en bos araca zorla ata (Kapasite asim uyarisi vermemesi icin yukari süzgecten gecmisti)
-                            en_bos_arac = min(arac_yukleri, key=arac_yukleri.get)
-                            arac_rotalari[en_bos_arac].append(m_verisi)
-                            arac_yukleri[en_bos_arac] += m_verisi["Talep_KG"]
-
-                    st.success("Rotalar basariyla optimize edildi!")
-                    
-                    # Yazili Rota Alternatifleri ve Siralamasi Alani
-                    st.subheader("Yolculuk ve Ziyaret Siralamasi")
-                    
-                    fig = go.Figure()
-                    renkler = ['#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#f1c40f']
-                    toplam_yol_mesafesi = 0
-
-                    for a_id, duraklar in arac_rotalari.items():
-                        if len(duraklar) > 0:
-                            # Depodan basla, secilen musteriler arasinda en kisa sirayi permütasyon ile kesin bul
-                            en_iyi_sirali_duraklar = []
-                            en_kisa_alt_mesafe = float('inf')
-                            
-                            for perm in itertools.permutations(duraklar):
-                                mevcut_yol = [(0, 0)] + [(d["X_Koordinati"], d["Y_Koordinati"]) for d in perm] + [(0, 0)]
-                                m_mesafe = sum(mesafe_bul(mevcut_yol[i], mevcut_yol[i+1]) for i in range(len(mevcut_yol)-1))
-                                if m_mesafe < en_kisa_alt_mesafe:
-                                    en_kisa_alt_mesafe = m_mesafe
-                                    en_iyi_sirali_duraklar = list(perm)
-                            
-                            toplam_yol_mesafesi += en_kisa_alt_mesafe
-                            
-                            # Siralama Metnini Olusturma
-                            ziyaret_sirasi_isimleri = ["Depo (Merkez)"] + [d["Musteri_Adi"] for d in en_iyi_sirali_duraklar] + ["Depo (Merkez)"]
-                            rota_metni = " -> ".join(ziyaret_sirasi_isimleri)
-                            
-                            st.info(f"Arac {a_id + 1} Optimum Siralamasi (Yuk: {arac_yukleri[a_id]} KG / Kapasite: {arac_kapasitesi} KG): {rota_metni}")
-                            
-                            # Harita Cizim Bilgileri
-                            harita_x = [0] + [d["X_Koordinati"] for d in en_iyi_sirali_duraklar] + [0]
-                            harita_y = [0] + [d["Y_Koordinati"] for d in en_iyi_sirali_duraklar] + [0]
-                            
-                            fig.add_trace(go.Scatter(
-                                x=harita_x,
-                                y=harita_y,
-                                mode='lines+markers',
-                                line=dict(width=3, color=renkler[a_id % len(renkler)]),
-                                marker=dict(size=8),
-                                name=f"Arac {a_id + 1} Rotasi"
-                            ))
-                        else:
-                            st.warning(f"Arac {a_id + 1} Atanmis Yuk Kalmadigi Icin Depoda Beklemede.")
-
-                    # Grafik Yerlesimi
-                    fig.add_trace(go.Scatter(
-                        x=df["X_Koordinati"].iloc[1:], 
-                        y=df["Y_Koordinati"].iloc[1:],
-                        mode='markers+text',
-                        marker=dict(size=12, color='rgb(44, 62, 80)'),
-                        text=df["Musteri_Adi"].iloc[1:], 
-                        textposition="top center",
-                        name="Aktif Siparisler"
-                    ))
-
-                    fig.add_trace(go.Scatter(
-                        x=[0], y=[0],
-                        mode='markers+text',
-                        marker=dict(size=16, color='rgb(192, 57, 43)', symbol='square'),
-                        text=["DEPO"], 
-                        textposition="bottom center",
-                        name="Merkez Depo"
-                    ))
-
-                    fig.update_layout(
-                        xaxis_title="X Koordinati",
-                        yaxis_title="Y Koordinati",
-                        template="plotly_white",
-                        height=500
-                    )
-                    
-                    st.subheader("Optimize Dagitim Rotalari Haritasi")
-                    st.plotly_chart(fig, use_container_width=True)
-                    st.metric("Toplam Operasyonel Sefer Mesafesi", f"{toplam_yol_mesafesi:.2f} Birim")
+                                # Aracin son konumuna olan mesafesini olc
+                                if len(arac_rotalari[a_id]) == 0:
+                                    son_konum = (0, 0)
+                                else:
+                                    son_konum = (arac_rotalari[a_id][-1]["X_Koordinati"], arac_rotalari[a_id][-1]["Y_Koordinati"])
+                                
+                                m_konum = (m_verisi["X_Koordinati"], m_verisi["Y_Koordinati"])
+                                d = mesafe_bul(son_konum, m_konum)
+                                uygun_araclar.append((a_id, d))
+                        
+                        if
