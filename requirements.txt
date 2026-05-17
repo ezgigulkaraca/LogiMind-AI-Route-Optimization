@@ -1,5 +1,6 @@
 streamlit
-ortools
+numpy
 pandas
 plotly
-
+ortools
+google-generativeai
