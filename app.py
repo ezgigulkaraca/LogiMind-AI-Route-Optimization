@@ -14,7 +14,7 @@ st.write("KOBIler ve lojistik saglayicilari icin operasyonel maliyetleri ve karb
 # Kontrol Paneli (Sidebar)
 st.sidebar.header("Sistem Parametreleri")
 arac_sayisi = st.sidebar.slider("Aktif Arac Sayisi", min_value=1, max_value=5, value=3)
-arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=10, max_value=50, value=25)
+arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=10, max_value=100, value=40)
 
 # Siparis Veri Modeli
 data_dict = {
@@ -64,16 +64,25 @@ if st.button("Rotalari Optimize Et", type="primary"):
                     return int(df["Talep_KG"].iloc[manager.IndexToNode(from_index)])
                     
                 demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+                
+                # Kapasite kısıtını daha esnek hale getirdik
                 routing.AddDimensionWithVehicleCapacity(
                     demand_callback_index,
-                    0,
+                    0,  # Sıfır kapasite esnekliği
                     [arac_kapasitesi] * arac_sayisi,
                     True,
                     "Capacity"
                 )
 
+                # Algoritmanın kilitlenmesini önlemek için ceza puanı ekleme (Düğümleri düşürmemek için)
+                penalty = 100000
+                for node in range(1, len(mesafeler)):
+                    routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+
                 search_parameters = pywrapcp.DefaultRoutingSearchParameters()
                 search_parameters.first_solution_strategy = (routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC)
+                search_parameters.local_search_metaheuristic = (routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH)
+                search_parameters.time_limit.seconds = 2
 
                 # Cozum Asamasi
                 solution = routing.SolveWithParameters(search_parameters)
@@ -84,7 +93,7 @@ if st.button("Rotalari Optimize Et", type="primary"):
                     # Performans Metrikleri Paneli
                     col1, col2, col3, col4 = st.columns(4)
                     
-                    eski_mesafe = float(df["X_Koordinati"].abs().sum() + df["Y_Koordinati"].abs().sum()) * 1.5
+                    eski_mesafe = float(df["X_Koordinati"].abs().sum() + df["Y_Koordinati"].abs().sum()) * 1.2
                     yeni_mesafe = 0
                     rotalar = {}
                     
@@ -113,8 +122,16 @@ if st.button("Rotalari Optimize Et", type="primary"):
                     with col4:
                         st.metric("CO2 Salinim Azaltimi", f"{karbon_tasarruf:.1f} KG")
 
+                    # YAZILI ROTA SIRALAMASI (İstediğiniz adım adım kılavuz)
+                    st.subheader("Yolculuk ve Ziyaret Siralamasi")
+                    for vehicle_id, route in rotalar.items():
+                        if len(route) > 2:
+                            isimler = [df["Musteri_Adi"].iloc[node] for node in route]
+                            rota_metni = " -> ".join(isimler)
+                            st.info(f"Arac {vehicle_id + 1} Siralamasi: {rota_metni}")
+
                     # Interaktif Rota Analiz Haritasi
-                    st.subheader("Optimize Dagitim Rotalari Analizi")
+                    st.subheader("Optimize Dagitim Rotalari Haritasi")
                     fig = go.Figure()
 
                     # Musteri Konumlari
@@ -169,7 +186,7 @@ if st.button("Rotalari Optimize Et", type="primary"):
                     st.plotly_chart(fig, use_container_width=True)
                     
                 else:
-                    st.warning("Optimizasyon motoru bu parametrelerle gecerli bir rota cizemedi. Algoritmanin tum noktalara ulasabilmesi icin lutfen sol menuden Aktif Arac Sayisini veya Arac Kapasitesini biraz daha artirarak tekrar deneyin.")
+                    st.warning("Optimizasyon motoru bu parametrelerle uygun bir rota hesaplayamadi. Lutfen sol menuden araç sayisini veya kapasitesini yukseltip tekrar deneyin.")
             
             except Exception as e:
-                st.info("Sistem bu parametre sinirlarinda kararli bir cozum kumesi uretemedi. Lutfen 'Aktif Arac Sayisi: 4' ve 'Arac Kapasitesi: 30' veya daha yuksek kombinasyonlari secerek algoritmayi tekrar tetikleyin.")
+                st.error(f"Sistemsel bir hata olustu: {str(e)}")
