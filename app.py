@@ -51,9 +51,9 @@ def random_mesafe(df_input):
 
 # Gemini Yapay Zeka Raporlama Fonksiyonu
 def gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik):
+    import requests
+    import json
     try:
-        model = genai.GenerativeModel("gemini-pro")
-
         prompt = f"""
         Sen bir lojistik ve rota optimizasyon uzmanısın. 
         Asagidaki verileri analiz et ve jüriyi etkileyecek profesyonel bir yonetici ozeti cikar:
@@ -68,11 +68,18 @@ def gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik):
         - Saha operasyonlari ve suruculer icin 1 adet pratik lojistik oneri
         - Bu optimizasyonun karbon salinimi (yesil lojistik) ve sirket maliyetlerine etkisi
         """
-
-        response = model.generate_content(prompt)
-        return response.text
+        
+        # Doğrudan kararlı v1 API endpoint'ine istek atıyoruz
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        headers = {'Content-Type': 'application/json'}
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        res_json = response.json()
+        
+        return res_json['candidates'][0]['content']['parts'][0]['text']
     except Exception as e:
-        return f"AI Degerlendirmesi su an olusturulamadi. Lutfen API anahtarinizi kontrol edin. Hata: {e}"
+        return f"AI Degerlendirmesi su an olusturulamadi. Hata: {e}"
 
 # Musteri Secim Ekrani
 st.subheader("Musteri Secimi ve Dagitim Talepleri")
