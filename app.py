@@ -63,22 +63,22 @@ def gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik):
         Rastgele Rotaya Gore Elde Edilen Tasarruf: %{tasarruf:.1f}
         Mevcut Trafik Yogunluk Katsayisi: {trafik}
 
-        Lutfen cok kisa, profesyonel ve net 3 madde halinde sunlari write:
+        Lutfen cok kisa, profesyonel ve net 3 madde halinde sunlari yaz:
         - Sistemin sagladigi genel verimlilik duzeyi (LogiMind platformunun basarisi)
         - Saha operasyonlari ve suruculer icin 1 adet pratik lojistik oneri
         - Bu optimizasyonun karbon salinimi (yesil lojistik) ve sirket maliyetlerine etkisi
         """
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        # Kararli ana sürüm olan v1 endpoint'ini ve doğrudan model adını kullanıyoruz
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
         headers = {'Content-Type': 'application/json'}
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         
         response = requests.post(url, headers=headers, data=json.dumps(payload))
         res_json = response.json()
         
-        # Google'dan gelen yanit hatali ise yakalayalim
         if 'error' in res_json:
-            return f"Google API Hatasi: {res_json['error']['message']} (Lutfen API Key'inizi veya Google AI Studio panelinizi kontrol edin.)"
+            return f"Google API Hatasi: {res_json['error']['message']}"
             
         return res_json['candidates'][0]['content']['parts'][0]['text']
     except Exception as e:
