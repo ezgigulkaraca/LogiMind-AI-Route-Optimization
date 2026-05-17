@@ -3,228 +3,206 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import itertools
-import random
 import google.generativeai as genai
 
-# -----------------------------
-# API KEY (Streamlit Secrets)
-# -----------------------------
-genai.configure(api_key=st.secrets["AIzaSyBTvNzZnb6oVqiMDQCfQjcD-pTvcXsoc_o"])
+# Sayfa Yapilandirmasi
+st.set_page_config(page_title="LogiMind - Lojistik Optimizasyon Sistemi", layout="wide")
 
-# -----------------------------
-# SAYFA AYARLARI
-# -----------------------------
-st.set_page_config(page_title="LogiMind - Rota Optimizasyonu", layout="wide")
+st.title("LogiMind: Akilli Rota ve Yuk Optimizasyon Platformu")
+st.write("Musteri bazli secim ve yapay zeka destekli dinamik yuk/kapasite kontrol paneli.")
 
-st.title("LogiMind: Rota ve Yük Optimizasyon Sistemi")
-st.write("Lojistik operasyonlar için karar destek uygulaması")
+# Kontrol Paneli (Sidebar)
+st.sidebar.header("Sistem Parametreleri")
+arac_sayisi = st.sidebar.slider("Aktif Arac Sayisi", min_value=0, max_value=5, value=2)
+arac_kapasitesi = st.sidebar.slider("Arac Kapasitesi (KG)", min_value=5, max_value=100, value=15)
 
-# -----------------------------
-# SIDEBAR PARAMETRELER
-# -----------------------------
-st.sidebar.header("Parametreler")
+st.sidebar.markdown("---")
+st.sidebar.header("Yapay Zeka Ayarlari")
+# Kullanicinin AI Studio'dan aldigi anahtari girecegi alan
+api_key_input = st.sidebar.text_input("Gemini API Key giriniz:", type="password")
 
-arac_sayisi = st.sidebar.slider("Araç Sayısı", 1, 5, 2)
-arac_kapasitesi = st.sidebar.slider("Araç Kapasitesi", 5, 50, 15)
-trafik = st.sidebar.slider("Trafik Katsayısı", 1.0, 2.0, 1.0)
-
-# -----------------------------
-# MÜŞTERİ VERİSİ
-# -----------------------------
-tum_musteriler = {
-    "A": (5, 10, 3),
-    "B": (-3, 8, 5),
-    "C": (12, 2, 4),
-    "D": (8, -4, 2),
-    "E": (-6, -5, 6),
-    "F": (2, 15, 3),
-    "G": (14, -1, 5),
-    "H": (-2, -9, 2),
-    "I": (7, 7, 4)
+# Sabit Veri Havuzu
+tüm_musteriler = {
+    "Musteri A": {"X": 5, "Y": 10, "Talep": 3},
+    "Musteri B": {"X": -3, "Y": 8, "Talep": 5},
+    "Musteri C": {"X": 12, "Y": 2, "Talep": 4},
+    "Musteri D": {"X": 8, "Y": -4, "Talep": 2},
+    "Musteri E": {"X": -6, "Y": -5, "Talep": 6},
+    "Musteri F": {"X": 2, "Y": 15, "Talep": 3},
+    "Musteri G": {"X": 14, "Y": -1, "Talep": 5},
+    "Musteri H": {"X": -2, "Y": -9, "Talep": 2},
+    "Musteri I": {"X": 7, "Y": 7, "Talep": 4}
 }
 
-# -----------------------------
-# MESAFE FONKSİYONU
-# -----------------------------
-def mesafe(p1, p2):
-    return np.hypot(p1[0] - p2[0], p1[1] - p2[1]) * trafik
+# Matematiksel Mesafe Hesaplama Fonksiyonu
+def mesafe_bul(p1, p2):
+    return np.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
-# -----------------------------
-# RANDOM ROTA
-# -----------------------------
-def random_mesafe(df):
-    noktalar = df.iloc[1:].to_dict('records')
-    random.shuffle(noktalar)
-    yol = [(0,0)] + [(n["x"], n["y"]) for n in noktalar] + [(0,0)]
-    return sum(mesafe(yol[i], yol[i+1]) for i in range(len(yol)-1))
+# 1. Kural: Arac Sayisi 0 ise direkt engelle
+if arac_sayisi == 0:
+    st.error("Hata: Aktif arac sayisi 0 oldugunda tasima yapilamaz, rota olusturulamadi. Lutfen en az 1 arac seciniz.")
+else:
+    # Dinamik Musteri Secim Kutusu
+    st.subheader("Siparis Veren Musterileri Seciniz")
+    secilen_isimler = st.multiselect(
+        "Bugun teslimat yapilacak musterileri listeden isaretleyin:",
+        options=list(tüm_musteriler.keys()),
+        default=["Musteri A", "Musteri G", "Musteri D", "Musteri C", "Musteri E"]
+    )
 
-# -----------------------------
-# GEMINI YORUM FONKSİYONU
-# -----------------------------
-def gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik):
-    try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
+    # Secilen verilerden dinamik tablo olusturma
+    tablo_verisi = []
+    tablo_verisi.append({"Musteri_Adi": "Depo (Merkez)", "X_Koordinati": 0, "Y_Koordinati": 0, "Talep_KG": 0})
+    
+    for m in secilen_isimler:
+        tablo_verisi.append({
+            "Musteri_Adi": m,
+            "X_Koordinati": tüm_musteriler[m]["X"],
+            "Y_Koordinati": tüm_musteriler[m]["Y"],
+            "Talep_KG": tüm_musteriler[m]["Talep"]
+        })
+        
+    df = pd.DataFrame(tablo_verisi)
+    
+    st.subheader("Mevcut Siparis ve Dagitim Verileri")
+    st.dataframe(df, use_container_width=True)
 
-        prompt = f"""
-        Sen bir lojistik uzmanısın.
-
-        Aşağıdaki dağıtım planını değerlendir:
-
-        Araç sayısı: {arac_sayisi}
-        Toplam mesafe: {toplam_mesafe:.2f}
-        Tasarruf: %{tasarruf:.1f}
-        Trafik katsayısı: {trafik}
-
-        3 kısa madde yaz:
-        - verimlilik analizi
-        - iyileştirme önerisi
-        - işletmeye etkisi
-        """
-
-        response = model.generate_content(prompt)
-        return response.text
-
-    except Exception as e:
-        return f"AI yorum oluşturulamadı: {e}"
-
-# -----------------------------
-# MÜŞTERİ SEÇİMİ
-# -----------------------------
-st.subheader("Müşteri Seçimi")
-
-secili = st.multiselect(
-    "Teslimat yapılacak müşterileri seçiniz:",
-    list(tum_musteriler.keys()),
-    default=["A","B","C","D","E"]
-)
-
-if len(secili) == 0:
-    st.warning("En az bir müşteri seçilmelidir.")
-    st.stop()
-
-# -----------------------------
-# DATAFRAME
-# -----------------------------
-data = [{"name":"Depo","x":0,"y":0,"demand":0}]
-
-for m in secili:
-    x,y,d = tum_musteriler[m]
-    data.append({"name":m,"x":x,"y":y,"demand":d})
-
-df = pd.DataFrame(data)
-
-st.dataframe(df)
-
-# -----------------------------
-# OPTİMİZASYON
-# -----------------------------
-if st.button("Optimize Et"):
-
-    toplam_talep = df["demand"].sum()
-    toplam_kapasite = arac_sayisi * arac_kapasitesi
-
-    if toplam_talep > toplam_kapasite:
-        st.error("Toplam talep kapasiteyi aşmaktadır.")
-        st.stop()
-
-    musteri_listesi = data[1:]
-
-    arac_rotalari = {i: [] for i in range(arac_sayisi)}
-    arac_yukleri = {i: 0 for i in range(arac_sayisi)}
-
-    # müşteri atama
-    for m in musteri_listesi:
-        uygun = []
-
-        for a in range(arac_sayisi):
-            if arac_yukleri[a] + m["demand"] <= arac_kapasitesi:
-                if len(arac_rotalari[a]) == 0:
-                    son = (0,0)
-                else:
-                    son = (arac_rotalari[a][-1]["x"], arac_rotalari[a][-1]["y"])
-
-                d = mesafe(son, (m["x"], m["y"]))
-                uygun.append((a,d))
-
-        if uygun:
-            uygun.sort(key=lambda x: x[1])
-            secilen = uygun[0][0]
+    # Optimizasyon Butonu
+    if st.button("Rotalari Optimize Et", type="primary"):
+        if len(secilen_isimler) == 0:
+            st.warning("Lutfen rota olusturabilmek icin en az bir musteri seciniz.")
         else:
-            secilen = min(arac_yukleri, key=arac_yukleri.get)
+            toplam_talep = df["Talep_KG"].sum()
+            toplam_kapasite = arac_sayisi * arac_kapasitesi
+            
+            # 2. Kural: Kapasite kontrolu
+            if toplam_talep > toplam_kapasite:
+                st.error(f"Hata: Yetersiz Kapasite. Secilen musterilerin toplam talebi {toplam_talep} KG, fakat {arac_sayisi} aracinizin toplam tasima kapasitesi {toplam_kapasite} KG. Lutfen parametreleri guncelleyin.")
+            else:
+                with st.spinner("Dengeli ve en kisa optimum rotalar hesaplaniyor..."):
+                    
+                    musteri_listesi = tablo_verisi[1:].copy()
+                    arac_rotalari = {i: [] for i in range(arac_sayisi)}
+                    arac_yukleri = {i: 0 for i in range(arac_sayisi)}
+                    
+                    # Yuk paylasim algoritmasi
+                    for m_verisi in musteri_listesi:
+                        uygun_araclar = []
+                        for a_id in range(arac_sayisi):
+                            if arac_yukleri[a_id] + m_verisi["Talep_KG"] <= arac_kapasitesi:
+                                if len(arac_rotalari[a_id]) == 0:
+                                    son_konum = (0, 0)
+                                else:
+                                    son_konum = (arac_rotalari[a_id][-1]["X_Koordinati"], arac_rotalari[a_id][-1]["Y_Koordinati"])
+                                
+                                m_konum = (m_verisi["X_Koordinati"], m_verisi["Y_Koordinati"])
+                                d = mesafe_bul(son_konum, m_konum)
+                                uygun_araclar.append((a_id, d))
+                        
+                        if len(uygun_araclar) > 0:
+                            uygun_araclar.sort(key=lambda x: x[1])
+                            secilen_arac = uygun_araclar[0][0]
+                            arac_rotalari[secilen_arac].append(m_verisi)
+                            arac_yukleri[secilen_arac] += m_verisi["Talep_KG"]
+                        else:
+                            en_bos_arac = min(arac_yukleri, key=arac_yukleri.get)
+                            arac_rotalari[en_bos_arac].append(m_verisi)
+                            arac_yukleri[en_bos_arac] += m_verisi["Talep_KG"]
 
-        arac_rotalari[secilen].append(m)
-        arac_yukleri[secilen] += m["demand"]
+                    st.success("Rotalar basariyla optimize edildi!")
+                    
+                    st.subheader("Yolculuk ve Ziyaret Siralamasi")
+                    fig = go.Figure()
+                    renkler = ['#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#f1c40f']
+                    toplam_yol_mesafesi = 0
+                    ozet_rapor_metni = ""
 
-    # rota optimizasyonu
-    toplam_mesafe = 0
-    fig = go.Figure()
-    renkler = ["red","blue","green","purple","orange"]
+                    for a_id in range(arac_sayisi):
+                        duraklar = arac_rotalari[a_id]
+                        if len(duraklar) > 0:
+                            en_iyi_sirali_duraklar = []
+                            en_kisa_alt_mesafe = float('inf')
+                            
+                            for perm in itertools.permutations(duraklar):
+                                mevcut_yol = [(0, 0)] + [(d["X_Koordinati"], d["Y_Koordinati"]) for d in perm] + [(0, 0)]
+                                m_mesafe = sum(mesafe_bul(mevcut_yol[i], mevcut_yol[i+1]) for i in range(len(mevcut_yol)-1))
+                                if m_mesafe < en_kisa_alt_mesafe:
+                                    en_kisa_alt_mesafe = m_mesafe
+                                    en_iyi_sirali_duraklar = list(perm)
+                            
+                            toplam_yol_mesafesi += en_kisa_alt_mesafe
+                            ziyaret_sirasi_isimleri = ["Depo (Merkez)"] + [d["Musteri_Adi"] for d in en_iyi_sirali_duraklar] + ["Depo (Merkez)"]
+                            rota_metni = " -> ".join(ziyaret_sirasi_isimleri)
+                            
+                            info_mesaji = f"Arac {a_id + 1} Rota Akisi (Yuk: {arac_yukleri[a_id]} KG / Kapasite: {arac_kapasitesi} KG): {rota_metni}"
+                            st.info(info_mesaji)
+                            ozet_rapor_metni += info_mesaji + "\n"
+                            
+                            harita_x = [0] + [d["X_Koordinati"] for d in en_iyi_sirali_duraklar] + [0]
+                            harita_y = [0] + [d["Y_Koordinati"] for d in en_iyi_sirali_duraklar] + [0]
+                            
+                            fig.add_trace(go.Scatter(
+                                x=harita_x, y=harita_y,
+                                mode='lines+markers',
+                                line=dict(width=3, color=renkler[a_id % len(renkler)]),
+                                marker=dict(size=8),
+                                name=f"Arac {a_id + 1} Rotasi"
+                            ))
+                        else:
+                            st.warning(f"Arac {a_id + 1} Icin Atanmis Yuk Yok (Depoda Beklemede).")
 
-    for a in range(arac_sayisi):
-        duraklar = arac_rotalari[a]
+                    fig.add_trace(go.Scatter(
+                        x=df["X_Koordinati"].iloc[1:], y=df["Y_Koordinati"].iloc[1:],
+                        mode='markers+text',
+                        marker=dict(size=12, color='rgb(44, 62, 80)'),
+                        text=df["Musteri_Adi"].iloc[1:], textposition="top center",
+                        name="Aktif Siparisler"
+                    ))
 
-        if not duraklar:
-            continue
+                    fig.add_trace(go.Scatter(
+                        x=[0], y=[0], mode='markers+text',
+                        marker=dict(size=16, color='rgb(192, 57, 43)', symbol='square'),
+                        text=["DEPO"], textposition="bottom center", name="Merkez Depo"
+                    ))
 
-        en_iyi = None
-        en_kisa = float("inf")
+                    fig.update_layout(xaxis_title="X Koordinati", yaxis_title="Y Koordinati", template="plotly_white", height=550)
+                    
+                    st.subheader("Optimize Dagitim Rotalari Haritasi")
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.metric("Toplam Operasyonel Sefer Mesafesi", f"{toplam_yol_mesafesi:.2f} Birim")
 
-        for perm in itertools.permutations(duraklar):
-            yol = [(0,0)] + [(d["x"], d["y"]) for d in perm] + [(0,0)]
-            m = sum(mesafe(yol[i], yol[i+1]) for i in range(len(yol)-1))
-
-            if m < en_kisa:
-                en_kisa = m
-                en_iyi = perm
-
-        toplam_mesafe += en_kisa
-
-        x = [0] + [d["x"] for d in en_iyi] + [0]
-        y = [0] + [d["y"] for d in en_iyi] + [0]
-
-        fig.add_trace(go.Scatter(
-            x=x,
-            y=y,
-            mode="lines+markers",
-            name=f"Arac {a+1}",
-            line=dict(color=renkler[a])
-        ))
-
-    # karşılaştırma
-    r_mesafe = random_mesafe(df)
-    tasarruf = ((r_mesafe - toplam_mesafe) / r_mesafe) * 100
-
-    # sonuçlar
-    st.subheader("Sonuçlar")
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Rastgele Mesafe", f"{r_mesafe:.2f}")
-    col2.metric("Optimize Mesafe", f"{toplam_mesafe:.2f}")
-    col3.metric("Tasarruf (%)", f"{tasarruf:.1f}")
-
-    # grafik
-    fig.add_trace(go.Scatter(
-        x=df["x"][1:],
-        y=df["y"][1:],
-        mode="markers+text",
-        text=df["name"][1:],
-        name="Musteriler"
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=[0], y=[0],
-        mode="markers+text",
-        text=["Depo"],
-        name="Depo"
-    ))
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # GEMINI AI YORUM
-    st.subheader("AI Destekli Değerlendirme")
-
-    yorum = gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik)
-    st.write(yorum)
-
-    st.write("Bu sistem lojistik operasyonlar için karar destek amacıyla geliştirilmiştir.")
+                    # GEMINI YAPAY ZEKA ANALIZ ALANI
+                    st.markdown("---")
+                    st.subheader("🔮 LogiMind Yapay Zeka Rota Analiz Raporu")
+                    
+                    if not api_key_input:
+                        st.info("Sol menuden 'Gemini API Key' girerek lojistik rotalariniz hakkinda yapay zeka yorumu ve verimlilik tavsiyeleri alabilirsiniz.")
+                    else:
+                        try:
+                            # Yapay zekayi baslat
+                            genai.configure(api_key=api_key_input)
+                            model = genai.GenerativeModel("gemini-1.5-flash")
+                            
+                            prompt_metni = f"""
+                            Sen profesyonel bir lojistik ve operasyon yonetimi uzmanisin. 
+                            Asagida bir lojistik dagitim sisteminin bugunku rota sonuclari yer almaktadir:
+                            
+                            - Toplam Operasyonel Mesafe: {toplam_yol_mesafesi:.2f} Birim
+                            - Toplam Musteri Talebi: {toplam_talep} KG
+                            - Arac Sayisi: {arac_sayisi} adet
+                            - Arac Kapasitesi: {arac_kapasitesi} KG
+                            
+                            Rota Detaylari:
+                            {ozet_rapor_metni}
+                            
+                            Lutfen bu sonuclari analiz ederek yoneticinin hizli anlayabilecegi sekilde Turkce olarak sunu yorumla:
+                            1. Rota dagilimi verimli mi, araclar dengeli yuklenmis mi?
+                            2. Mesafe ve operasyon maliyetlerini daha da dusurmek icin ne gibi oneriler sunarsin?
+                            Kisa, net ve profesyonel maddeler halinde yaz.
+                            """
+                            
+                            with st.spinner("Gemini yapay zeka rotalari inceliyor..."):
+                                response = model.generate_content(prompt_metni)
+                                st.write(response.text)
+                        except Exception as e:
+                            st.error(f"Yapay zeka raporu olusturulamadi. Gecersiz API anahtari veya baglanti hatasi. Hata: {e}")
