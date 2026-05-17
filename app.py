@@ -9,7 +9,7 @@ import google.generativeai as genai
 # -----------------------------
 # API KEY (Streamlit Secrets)
 # -----------------------------
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+genai.configure(api_key=st.secrets["AIzaSyBTvNzZnb6oVqiMDQCfQjcD-pTvcXsoc_o"])
 
 # -----------------------------
 # SAYFA AYARLARI
