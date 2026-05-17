@@ -9,8 +9,6 @@ import google.generativeai as genai
 # ==========================================
 # GEMINI API AYARI
 # ==========================================
-# Google AI Studio'dan aldiginiz anahtar dogrudan entegre edilmistir:
-
 API_KEY = "AIzaSyDUNxlbI32_-9rQPwl6_hDjHKHXlX30EcA"
 
 # ==========================================
@@ -105,7 +103,7 @@ if st.button("Rota ve Yuk Dagitimini Optimize Et"):
     toplam_kapasite = arac_sayisi * arac_kapasitesi
 
     if toplam_talep > toplam_kapasite:
-        st.error(f"Hata: Toplam musteri talebi ({toplam_talep}), mevcut araclarin toplam kapasitesini ({toplam_kapasite}) asiyor! Lutfen arac sayisini veya kapasitesini artirin.")
+        st.error(f"Hata: Toplam musteri talebi ({toplam_talep}), mevcut araclarin toplam kapasitesini ({toplam_kapasite}) asiyor! Lutfen arac sayisini ellerinizle veya kapasitesini artirin.")
         st.stop()
 
     musteri_listesi = data[1:]
@@ -187,4 +185,16 @@ if st.button("Rota ve Yuk Dagitimini Optimize Et"):
     r_mesafe = random_mesafe(df)
     tasarruf = ((r_mesafe - toplam_mesafe) / r_mesafe) * 100 if r_mesafe > 0 else 0
 
-    col1, col
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Geleneksel (Rastgele Rota)", f"{r_mesafe:.2f} km")
+    col2.metric("LogiMind (Optimize Rota)", f"{toplam_mesafe:.2f} km")
+    col3.metric("Saglanan Karbon/Yol Tasarrufu", f"%{tasarruf:.1f}")
+
+    # Haritayi Goster
+    st.plotly_chart(fig, use_container_width=True)
+
+    # AI Yorum Alani
+    st.subheader("LogiMind Yapay Zeka Degerlendirmesi")
+    with st.spinner("Gemini rapor hazirliyor..."):
+        ai_raporu = gemini_yorumla(arac_sayisi, toplam_mesafe, tasarruf, trafik)
+        st.info(ai_raporu)
